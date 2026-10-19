@@ -4,16 +4,61 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Poli_éthique — base de recherche · Présidentielle 2027</title>
+<script>
+// Thème : appliqué AVANT le premier rendu, sinon le visiteur en sombre se prend
+// un flash blanc à chaque chargement. Choix explicite mémorisé en localStorage ;
+// à défaut, on suit la préférence système. Aucun cookie, rien ne sort du navigateur.
+(function(){try{
+  var s=localStorage.getItem("pe-theme");
+  if(s!=="light"&&s!=="dark")
+    s=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";
+  document.documentElement.setAttribute("data-theme",s);
+}catch(e){document.documentElement.setAttribute("data-theme","light");}})();
+</script>
 <style>
+/* Thème clair (défaut). Toute couleur du site passe par ces variables :
+   le thème sombre plus bas ne fait que les redéfinir, il ne duplique aucune règle. */
 :root{
   --bg:#ffffff; --bg2:#f7f7f5;
   --ink:#14161a; --ink2:#3a3f47; --txt:#14161a;
-  --muted:#6b7280; --muted2:#9aa0a8;
+  --muted:#6b7280; --muted2:#6f7681;
   --line:#e4e4e0; --line2:#ededea; --border:#e4e4e0;
   --accent:#16305c; --accent-soft:#eef1f6;
   --warn-bg:#fbf3e2; --warn-tx:#7a5a1e; --warn-line:#ecdcb4;
   --pos1:#3b6ea5; --pos2:#8a6d2f; --pos3:#6b5091;
+  --on-ink:#ffffff;
+  --tag-o:#2f7d4f;  --tag-o-b:#c9e2d2;
+  --tag-sp:#2f5f96; --tag-sp-b:#cfdcec;
+  --tag-m:#8a6d2f;  --tag-m-b:#e6dcc4;
+  --tag-w:#6b5091;  --tag-w-b:#ddd3ea;
+  --tag-e:#a04747;  --tag-e-b:#eecccc;
+  --hatch:rgba(0,0,0,.035);
 }
+/* Thème sombre. Pas de noir pur (#000) : un gris encre profond fatigue moins
+   que le contraste maximal, et laisse de la place pour une 2ᵉ surface (--bg2).
+   Les couleurs de tag sont désaturées + éclaircies, sinon elles vibrent sur fond
+   sombre ; leurs bordures passent en teinte translucide pour rester discrètes. */
+html[data-theme="dark"]{
+  --bg:#14161a; --bg2:#1c1f25;
+  --ink:#e9eaec; --ink2:#bdc2ca; --txt:#e9eaec;
+  --muted:#99a0ab; --muted2:#828a94;
+  --line:#2c3038; --line2:#242830; --border:#2c3038;
+  --accent:#7ba6dd; --accent-soft:#1d2530;
+  --warn-bg:#2b2416; --warn-tx:#dcc085; --warn-line:#4a3f22;
+  --pos1:#7ba6dd; --pos2:#c9a86a; --pos3:#a98fd0;
+  --on-ink:#14161a;
+  --tag-o:#6fc394;  --tag-o-b:#2f5742;
+  --tag-sp:#7fb0e6; --tag-sp-b:#2d4765;
+  --tag-m:#cfae6c;  --tag-m-b:#574a2c;
+  --tag-w:#b198e0;  --tag-w-b:#453a5e;
+  --tag-e:#e08b8b;  --tag-e-b:#5e3636;
+  --hatch:rgba(255,255,255,.045);
+}
+html[data-theme="dark"] img,html[data-theme="dark"] .no-invert{filter:none}
+/* Le navigateur doit connaître le thème : scrollbars, champs de formulaire et
+   surface par défaut suivent, sinon on garde des bandes blanches sur les bords. */
+:root{color-scheme:light}
+html[data-theme="dark"]{color-scheme:dark}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -47,6 +92,9 @@ nav.links a.on{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
 .search input{background:var(--bg2);border:1px solid var(--line);color:var(--ink);
   padding:8px 12px 8px 32px;font-size:13.5px;width:210px}
 .search input:focus{outline:none;border-color:var(--accent)}
+.theme-btn{background:none;border:1px solid var(--line);color:var(--ink2);font-size:15px;line-height:1;
+  padding:7px 11px;cursor:pointer;flex:none}
+.theme-btn:hover{border-color:var(--accent);color:var(--accent)}
 
 .container{max-width:1160px;margin:0 auto;padding:34px 24px 90px}
 
@@ -94,7 +142,7 @@ h2.note-title,.note-title{font-size:34px;margin:6px 0 16px;line-height:1.12;font
   cursor:pointer;transition:background .12s;display:block}
 .trib-feature:hover{background:var(--bg2)}
 .trib-feature .tf-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  background:var(--ink);color:#fff;padding:7px 16px;font-size:11px;font-weight:800;
+  background:var(--ink);color:var(--on-ink);padding:7px 16px;font-size:11px;font-weight:800;
   letter-spacing:.14em;text-transform:uppercase}
 .trib-feature .tf-top .tf-sep{opacity:.45;font-weight:400;letter-spacing:0}
 .trib-feature .tf-top .tf-meta{font-weight:600;letter-spacing:.04em;opacity:.8;text-transform:none}
@@ -116,9 +164,9 @@ h2.note-title,.note-title{font-size:34px;margin:6px 0 16px;line-height:1.12;font
 /* tags de source */
 .stag{display:inline-block;font-size:11px;font-weight:800;padding:1px 6px;border:1px solid var(--line);
   vertical-align:middle;color:var(--ink2)}
-.stag-O{color:#2f7d4f;border-color:#c9e2d2} .stag-SP{color:#2f5f96;border-color:#cfdcec}
-.stag-M{color:#8a6d2f;border-color:#e6dcc4} .stag-W{color:#6b5091;border-color:#ddd3ea}
-.stag-E{color:#a04747;border-color:#eecccc}
+.stag-O{color:var(--tag-o);border-color:var(--tag-o-b)} .stag-SP{color:var(--tag-sp);border-color:var(--tag-sp-b)}
+.stag-M{color:var(--tag-m);border-color:var(--tag-m-b)} .stag-W{color:var(--tag-w);border-color:var(--tag-w-b)}
+.stag-E{color:var(--tag-e);border-color:var(--tag-e-b)}
 .todo{background:var(--warn-bg);color:var(--warn-tx);border:1px solid var(--warn-line);padding:1px 6px;font-size:12px;font-weight:700}
 
 /* positions études (neutres, sans valence) */
@@ -172,7 +220,7 @@ tr:hover td{background:var(--bg2)}
 /* tribunes — couche d'opinion, visuellement distincte de la base neutre */
 .nav-tribune{border:1px solid var(--line);padding:2px 9px !important}
 .tribune-flag{border:2px solid var(--ink);padding:14px 16px;margin:0 0 22px;font-size:13.5px;line-height:1.5;
-  background:repeating-linear-gradient(135deg,transparent,transparent 9px,rgba(0,0,0,.035) 9px,rgba(0,0,0,.035) 18px)}
+  background:repeating-linear-gradient(135deg,transparent,transparent 9px,var(--hatch) 9px,var(--hatch) 18px)}
 .tribune-flag .hd{font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:11.5px;display:block;margin-bottom:7px}
 .tribune-flag b{color:var(--ink)}
 .tribune-sign{font-size:13px;color:var(--muted);margin:-8px 0 20px}
@@ -195,7 +243,8 @@ footer.foot{border-top:2px solid var(--ink);margin-top:44px}
     background:var(--bg);border-bottom:1px solid var(--ink);padding:6px 16px}
   nav.links.open{display:flex}
   nav.links a{padding:9px 0;border-bottom:1px solid var(--line2)}
-  .burger{display:block}
+  .burger{display:block;margin-left:8px}
+  .theme-btn{margin-left:auto}
   .search{order:3;width:100%;margin:12px 0 0}.search input{width:100%}
   .nav-inner{flex-wrap:wrap;gap:14px}
   .confront{grid-template-columns:1fr}
@@ -260,6 +309,7 @@ footer.foot{border-top:2px solid var(--ink);margin-top:44px}
       <a class="nav-tribune" onclick="go('list-Articles')">Tribunes</a>
     </nav>
     <div class="search"><span class="ic">⌕</span><input id="q" type="text" placeholder="Rechercher…" oninput="onSearch(this.value)"></div>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Basculer clair / sombre" aria-label="Basculer le thème clair ou sombre"><span id="themeIc">◐</span></button>
   </div>
 </header>
 <div class="container" id="app"></div>
@@ -285,6 +335,21 @@ const FOLDER_LABEL = {Partis:"Parti",Personnalites:"Personnalité",Programmes:"P
 const FOLDER_LABEL_PL = {Partis:"Partis",Personnalites:"Personnalités",Programmes:"Programmes",Mesures:"Mesures",Etudes:"Études",Confrontations:"Confrontations",Declarations:"Déclarations",Sources:"Sources",Themes:"Thèmes",Articles:"Tribunes"};
 const SRC_TAGS = {O:"officiel",SP:"source primaire",M:"média",W:"Wikipédia",E:"estimation / projection"};
 const RHETORIQUE={"euphemisme":"euphémisme","metaphore":"métaphore","prolepse":"prolepse","fausse-equivalence":"fausse équivalence","argument-autorite":"argument d'autorité","cadre-reframe":"recadrage","amalgame":"amalgame","deplacement-sujet":"déplacement de sujet","surenchere":"surenchère"};
+
+// Thème — l'icône reflète ce vers quoi le clic bascule, pas l'état courant.
+function syncThemeIcon(){
+  const d=document.documentElement.getAttribute("data-theme")==="dark";
+  const ic=document.getElementById("themeIc");
+  if(ic) ic.textContent=d?"☀":"☾";
+  const b=document.getElementById("themeBtn");
+  if(b) b.title=d?"Passer en thème clair":"Passer en thème sombre";
+}
+function toggleTheme(){
+  const next=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";
+  document.documentElement.setAttribute("data-theme",next);
+  try{localStorage.setItem("pe-theme",next);}catch(e){}
+  syncThemeIcon();
+}
 
 function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function unesc(s){return s.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&");}
@@ -1127,6 +1192,7 @@ function onSearch(q){
   document.getElementById("app").innerHTML=h;
 }
 window.addEventListener("hashchange",render);
+syncThemeIcon();
 render();
 </script>
 </body>
