@@ -14,6 +14,18 @@
     s=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";
   document.documentElement.setAttribute("data-theme",s);
 }catch(e){document.documentElement.setAttribute("data-theme","light");}})();
+// Langue de l'interface. Résolue ici aussi pour que l'attribut lang= soit correct
+// dès le premier rendu (lecteurs d'écran, moteurs). Le CONTENU des notes reste en
+// français quelle que soit la langue choisie — voir t() et le bandeau de langue.
+(function(){try{
+  var l=localStorage.getItem("pe-lang");
+  if(l!=="fr"&&l!=="en"&&l!=="ru"){
+    var n=(navigator.language||"fr").slice(0,2).toLowerCase();
+    l=(n==="en"||n==="ru")?n:"fr";
+  }
+  document.documentElement.setAttribute("lang",l);
+  document.documentElement.setAttribute("data-lang",l);
+}catch(e){}})();
 </script>
 <style>
 /* Thème clair (défaut). Toute couleur du site passe par ces variables :
@@ -95,6 +107,16 @@ nav.links a.on{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
 .theme-btn{background:none;border:1px solid var(--line);color:var(--ink2);font-size:15px;line-height:1;
   padding:7px 11px;cursor:pointer;flex:none}
 .theme-btn:hover{border-color:var(--accent);color:var(--accent)}
+.lang-sel{display:flex;border:1px solid var(--line);flex:none}
+.lang-sel .lg{background:none;border:none;border-right:1px solid var(--line);color:var(--muted);
+  font-size:11.5px;font-weight:700;letter-spacing:.06em;padding:7px 9px;cursor:pointer;line-height:1}
+.lang-sel .lg:last-child{border-right:none}
+.lang-sel .lg:hover{color:var(--accent)}
+.lang-sel .lg.on{background:var(--ink);color:var(--on-ink)}
+/* Avertissement de langue : le contenu des notes reste en VO française. */
+.lang-note{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--bg2);
+  padding:10px 14px;margin:0 0 20px;font-size:13px;color:var(--ink2);line-height:1.5}
+.lang-note b{color:var(--ink)}
 
 .container{max-width:1160px;margin:0 auto;padding:34px 24px 90px}
 
@@ -244,7 +266,8 @@ footer.foot{border-top:2px solid var(--ink);margin-top:44px}
   nav.links.open{display:flex}
   nav.links a{padding:9px 0;border-bottom:1px solid var(--line2)}
   .burger{display:block;margin-left:8px}
-  .theme-btn{margin-left:auto}
+  .lang-sel{margin-left:auto}
+  .theme-btn{margin-left:0}
   .search{order:3;width:100%;margin:12px 0 0}.search input{width:100%}
   .nav-inner{flex-wrap:wrap;gap:14px}
   .confront{grid-template-columns:1fr}
@@ -309,15 +332,20 @@ footer.foot{border-top:2px solid var(--ink);margin-top:44px}
       <a class="nav-tribune" onclick="go('list-Articles')">Tribunes</a>
     </nav>
     <div class="search"><span class="ic">⌕</span><input id="q" type="text" placeholder="Rechercher…" oninput="onSearch(this.value)"></div>
+    <div class="lang-sel" id="langSel" role="group" aria-label="Langue de l'interface">
+      <button class="lg" data-l="fr" onclick="setLang('fr')" title="Interface en français">FR</button>
+      <button class="lg" data-l="en" onclick="setLang('en')" title="Interface in English">EN</button>
+      <button class="lg" data-l="ru" onclick="setLang('ru')" title="Интерфейс на русском">RU</button>
+    </div>
     <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Basculer clair / sombre" aria-label="Basculer le thème clair ou sombre"><span id="themeIc">◐</span></button>
   </div>
 </header>
 <div class="container" id="app"></div>
 <footer class="foot">
   <div class="foot-inner">
-    <a onclick="go('mentions')">Mentions légales</a>
+    <a id="footMentions" onclick="go('mentions')">Mentions légales</a>
     <span>·</span>
-    <span class="muted">Base de recherche neutre — sans but lucratif, sans publicité, non financée par un parti. Aucun cookie, aucun traceur, aucune donnée personnelle collectée.</span>
+    <span class="muted" id="footNote">Base de recherche neutre — sans but lucratif, sans publicité, non financée par un parti. Aucun cookie, aucun traceur, aucune donnée personnelle collectée.</span>
   </div>
 </footer>
 
@@ -335,6 +363,61 @@ const FOLDER_LABEL = {Partis:"Parti",Personnalites:"Personnalité",Programmes:"P
 const FOLDER_LABEL_PL = {Partis:"Partis",Personnalites:"Personnalités",Programmes:"Programmes",Mesures:"Mesures",Etudes:"Études",Confrontations:"Confrontations",Declarations:"Déclarations",Sources:"Sources",Themes:"Thèmes",Articles:"Tribunes"};
 const SRC_TAGS = {O:"officiel",SP:"source primaire",M:"média",W:"Wikipédia",E:"estimation / projection"};
 const RHETORIQUE={"euphemisme":"euphémisme","metaphore":"métaphore","prolepse":"prolepse","fausse-equivalence":"fausse équivalence","argument-autorite":"argument d'autorité","cadre-reframe":"recadrage","amalgame":"amalgame","deplacement-sujet":"déplacement de sujet","surenchere":"surenchère"};
+
+/* ---------------------------------------------------------------------------
+   Traduction de l'INTERFACE (fr · en · ru).
+
+   La clé est la chaîne française elle-même : une clé manquante retombe donc sur
+   le français lisible plutôt que sur un libellé vide ou un identifiant technique.
+
+   PÉRIMÈTRE — à ne pas élargir sans y réfléchir : seule l'interface est traduite
+   (navigation, méthode, mentions légales, bandeaux, libellés). Le CONTENU des
+   notes reste en français. Motif : la base est construite sur des VERBATIMS
+   tagués [O]/[SP]/[M]. Une citation traduite n'est plus la citation — c'est une
+   paraphrase, et la vérifiabilité (tout l'argument du site) s'effondre avec elle.
+   Mieux vaut un lecteur étranger qui comprend la méthode et lit la citation en
+   version originale, qu'un lecteur à qui l'on sert une traduction présentée
+   comme une source.                                                           */
+const I18N={"en": {"Rechercher…": "Search…", "Mentions légales": "Legal notice", "Base de recherche neutre — sans but lucratif, sans publicité, non financée par un parti. Aucun cookie, aucun traceur, aucune donnée personnelle collectée.": "A neutral research database — non-profit, ad-free, not funded by any political party. No cookies, no trackers, no personal data collected.", "__LANGNOTE__": "<b>The interface is translated — the research material is not.</b> Quotations, party programmes and studies stay in the original French. Every entry here is built on verbatim quotations tagged by source type; a translated quotation is no longer the quotation, and the whole point of this site is that you can go back to the document and check it yourself. Each note links to its archived source.", "charte des tribunes": "op-ed charter", "Rubrique Tribunes": "Op-ed section", "Cette page décrit les règles de la rubrique <b>Tribunes</b> — la couche d'<b>opinion signée</b> du site, distincte de la base de recherche neutre.": "This page sets out the rules of the <b>Op-ed</b> section — the site's layer of <b>signed opinion</b>, kept separate from the neutral research database.", "Tribune — opinion signée": "Op-ed — signed opinion", "Ce texte est une <b>tribune signée</b>. Il exprime le point de vue personnel de son auteur et <b>ne relève pas de la base de recherche neutre</b> de ce site. Les faits qui y sont cités restent sourcés et tagués comme partout ailleurs ; l'interprétation qui en est faite n'engage que l'auteur. <b>Aucune consigne de vote n'est donnée ici.</b>": "This is a <b>signed op-ed</b>. It states the personal view of its author and is <b>not part of this site's neutral research database</b>. The facts it cites are sourced and tagged exactly as everywhere else; the interpretation placed on them is the author's alone. <b>No voting recommendation is given here.</b>", "Voir la %1.": "See the %1.", "Accueil": "Home", "Base de recherche · Présidentielle 2027": "Research database · 2027 French presidential election", "Les faits, côte à côte.": "The facts, side by side.", "Pour chaque parti : ses prises de parole, son programme officiel et les études qui s'y rapportent — rassemblés et sourcés.": "For each party: what its figures have said, its official manifesto, and the research that bears on it — gathered and sourced.", "On montre les deux éléments. <b>Le lecteur juge.</b> Jamais de recommandation de vote, jamais de hiérarchie entre partis.": "Both sides are shown. <b>You be the judge.</b> No voting recommendation, ever; no ranking of parties, ever.", "<b>%1 notes validées sur %2</b> (%3%)": "<b>%1 of %2 entries validated</b> (%3%)", "seules les notes « publie » sont publiées ici, avec les sources qu'elles citent ; les %1 notes encore en vérification restent hors du site.": "only entries marked “published” appear here, together with the sources they cite; the %1 entries still being checked are kept off the site.", "<b>aperçu interne</b> : les %1 notes « draft » / « relu » sont affichées avec leur badge de statut et ne figurent pas sur le site public.": "<b>internal preview</b>: the %1 “draft” / “second-pass” entries are shown here with their status badge and do not appear on the public site.", "Voir la méthode →": "Read the method →", "Voir tout :": "See all:", "Thèmes": "Topics", "Partis": "Parties", "ordre alphabétique": "alphabetical order", "Actualité récente": "Recent statements", "tout voir ›": "see all ›", "Déclaration": "Statement", "Outils d'analyse": "Analysis tools", "Écarts documentés": "Documented discrepancies", "%1 confrontation(s) avec écart": "%1 side-by-side comparison(s) showing a discrepancy", "Silences thématiques": "Topic silences", "Thèmes sans mesure par parti": "Topics on which a party proposes nothing", "Méthode": "Method", "Comment cette base est construite": "How this database is built", "Éditeur &amp; directeur de la publication": "Publisher &amp; editorial director", "Ce site est édité <b>à titre non professionnel</b> par un particulier publiant sous le pseudonyme <b>demoxzz</b>. <i>Poli_éthique</i> est le nom du site, pas celui de l'éditeur.": "This site is published <b>on a non-professional basis</b> by a private individual writing under the pseudonym <b>demoxzz</b>. <i>Poli_éthique</i> is the name of the site, not of its publisher.", "Conformément à l'article 6, III, 2° de la loi n°2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN), l'éditeur — personne physique éditant à titre non professionnel — a choisi de ne pas rendre publiques ses coordonnées personnelles ; son identité est tenue à la disposition de l'hébergeur et, le cas échéant, de l'autorité judiciaire.": "Under article 6, III, 2° of French law no. 2004-575 of 21 June 2004 on confidence in the digital economy (LCEN), the publisher — a natural person publishing on a non-professional basis — has chosen not to make personal contact details public; their identity is held at the disposal of the hosting provider and, where applicable, of the judicial authorities.", "Hébergeur": "Hosting provider", "Netlify, Inc. — 2325 3rd Street, Suite 215, San Francisco, CA 94107, États-Unis — <a href=\"https://www.netlify.com\" target=\"_blank\" rel=\"noopener\">www.netlify.com</a>.": "Netlify, Inc. — 2325 3rd Street, Suite 215, San Francisco, CA 94107, United States — <a href=\"https://www.netlify.com\" target=\"_blank\" rel=\"noopener\">www.netlify.com</a>.", "Objet &amp; neutralité": "Purpose &amp; neutrality", "Base de recherche documentaire et pédagogique sur la vie politique française. Elle présente faits, programmes et études de manière <b>factuelle et neutre</b>, <b>sans jamais recommander de vote ni hiérarchiser les partis</b>. Aucune synthèse ne conclut en faveur d'un camp.": "A documentary and educational research database on French political life. It presents facts, manifestos and studies in a <b>factual and neutral</b> way, <b>never recommending a vote and never ranking the parties</b>. No summary on this site concludes in favour of one side.", "Site <b>sans but lucratif</b>, sans publicité, <b>non financé par un parti, un candidat ou un groupement politique</b>.": "A <b>non-profit</b> site, with no advertising, <b>not funded by any party, candidate or political organisation</b>.", "Le site comporte une rubrique distincte, <b>Tribunes</b>, qui regroupe des <b>textes d'opinion signés</b>. Ces textes sont identifiés comme tels par un bandeau en tête de chaque page, n'engagent que leur auteur, <b>ne font pas partie de la base documentaire neutre</b> et ne sont jamais utilisés comme source par celle-ci. Comme le reste du site, ils <b>ne comportent aucun appel au vote</b> et les faits qu'ils citent sont sourcés et datés.": "The site has a separate <b>Op-ed</b> section containing <b>signed opinion pieces</b>. They are identified as such by a banner at the top of each page, commit no one but their author, <b>are not part of the neutral database</b>, and are never used as a source by it. Like the rest of the site, they <b>contain no call to vote</b>, and the facts they cite are sourced and dated.", "Cadre électoral": "Electoral framework", "En période électorale, ce site s'attache à respecter les principes d'équité et de neutralité rappelés par la Commission nationale de contrôle de la campagne électorale en vue de l'élection présidentielle (CNCCEP). Il ne constitue pas de la propagande électorale et ne procède à aucun appel au vote.": "During election periods this site seeks to observe the principles of fairness and neutrality set out by the French national commission supervising the presidential election campaign (CNCCEP). It does not constitute electoral propaganda and makes no call to vote.", "Sources &amp; propriété intellectuelle": "Sources &amp; intellectual property", "Chaque donnée est sourcée et datée. Les sources primaires (communiqués officiels, résultats de scrutins, sites des partis) et secondaires sont citées et, lorsque c'est possible, archivées (Wayback Machine).": "Every item of data is sourced and dated. Primary sources (official statements, election results, party websites) and secondary sources are cited and, where possible, archived (Wayback Machine).", "Certains contenus s'appuient sur Wikipédia, réutilisée sous licence <b>Creative Commons Attribution-ShareAlike (CC BY-SA)</b> ; les liens et dates de consultation figurent dans les fiches concernées. Les marques, logos et programmes cités demeurent la propriété de leurs auteurs ou partis respectifs.": "Some content draws on Wikipedia, reused under the <b>Creative Commons Attribution-ShareAlike (CC BY-SA)</b> licence; links and access dates are given in the entries concerned. Trademarks, logos and manifestos cited remain the property of their respective authors or parties.", "Données personnelles &amp; cookies": "Personal data &amp; cookies", "Ce site est <b>statique</b> : il ne dépose <b>aucun cookie</b>, n'utilise <b>aucun traceur</b> ni outil de mesure d'audience, et ne collecte <b>aucune donnée personnelle</b> des visiteurs.": "This site is <b>static</b>: it sets <b>no cookies</b>, uses <b>no trackers</b> or analytics tools, and collects <b>no personal data</b> from visitors.", "Pour toute demande (droit de réponse, correction d'une donnée, exercice des droits « informatique et libertés » / RGPD) : <a href=\"mailto:presidentielles2027.contact@gmail.com\">presidentielles2027.contact@gmail.com</a>.": "For any request (right of reply, correction of an item of data, exercise of data-protection rights under the GDPR): <a href=\"mailto:presidentielles2027.contact@gmail.com\">presidentielles2027.contact@gmail.com</a>.", "Responsabilité": "Liability", "Malgré le soin apporté aux vérifications, des erreurs restent possibles ; toute correction signalée à l'adresse de contact sera étudiée. Les contenus en statut « draft » ou « relu » relèvent de la recherche interne et ne constituent pas des informations validées.": "Despite the care taken in checking, errors remain possible; any correction reported to the contact address will be considered. Content marked “draft” or “second pass” is internal research and does not constitute validated information.", "Dernière mise à jour :": "Last updated:", "<span class=\"kicker\">Comment cette base est construite</span>": "<span class=\"kicker\">How this database is built</span>", "<h2 class=\"note-title\">Méthode</h2>": "<h2 class=\"note-title\">Method</h2>", "<h3>Taux de validation</h3>": "<h3>Validation rate</h3>", "%1% des notes de la base sont en statut « publie » (validées, sourcées, relues)": "%1% of the entries in the database are marked “published” (validated, sourced, second-passed)", ". Seules ces notes sont exportées vers le site : les %1 autres restent de la recherche interne.": ". Only those entries are exported to the site: the other %1 remain internal research.", ". ⚠ Ce rendu est un <b>aperçu interne</b> : il affiche aussi les %1 notes « draft » / « relu », qui sont absentes du site public.": ". ⚠ This build is an <b>internal preview</b>: it also shows the %1 “draft” / “second-pass” entries, which are absent from the public site.", "<h3>Workflow éditorial</h3>": "<h3>Editorial workflow</h3>", "<p>Chaque note passe par trois statuts avant publication :</p>": "<p>Every entry goes through three statuses before publication:</p>", "<ul><li><b>draft</b> — note en cours, données non vérifiées. Non exportée.</li>": "<ul><li><b>draft</b> — work in progress, data not yet verified. Not exported.</li>", "<li><b>relu</b> — reprise lors d'une passe de relecture distincte de la rédaction : vérification de l'attribution, du sourcing et de la neutralité. Non exportée.</li>": "<li><b>second pass</b> — revisited in a review pass separate from the writing: attribution, sourcing and neutrality are checked. Not exported.</li>", "<li><b>publie</b> — validée, sourcée, neutre. Seul statut exporté vers le site.</li></ul>": "<li><b>published</b> — validated, sourced, neutral. The only status exported to the site.</li></ul>", "<p><b>Ce que cette relecture est, et ce qu'elle n'est pas.</b> Ce site est tenu par une seule personne, sous le pseudonyme <b>demoxzz</b>. La relecture est donc une <i>seconde passe</i>, séparée dans le temps de la rédaction — pas un second regard indépendant. Elle attrape les erreurs d'attribution, les chiffres non remontés à la source et les formulations qui tranchent ; elle ne corrige pas les angles morts que l'auteur partage avec lui-même. C'est la limite assumée de cette base, et c'est pourquoi chaque donnée reste accompagnée de sa source : le contrôle réel, c'est que vous puissiez remonter au document vous-même.</p>": "<p><b>What this review is, and what it is not.</b> This site is run by one person, under the pseudonym <b>demoxzz</b>. The review is therefore a <i>second pass</i>, separated in time from the writing — not an independent second pair of eyes. It catches attribution errors, figures not traced back to their source, and wording that passes judgement; it does not correct the blind spots the author shares with himself. That is this database's acknowledged limit, and it is why every item of data keeps its source attached: the real check is that you can go back to the document yourself.</p>", "<p>Une exception, par souci de vérifiabilité : les notes <b>Sources</b> — matière de référence réduite à un type, une URL d'origine et son archive — accompagnent la base afin que chaque donnée publiée reste traçable. Elles ne portent pas d'analyse et ne suivent donc pas le cycle de relecture ci-dessus.</p>": "<p>One exception, in the interest of verifiability: <b>Source</b> entries — reference material reduced to a type, an original URL and its archive — accompany the database so that every published item stays traceable. They carry no analysis and therefore do not follow the review cycle above.</p>", "<p><b>⚠ Aperçu interne.</b> Ce fichier est un rendu de travail, destiné à la relecture éditoriale : il contient de la recherche non vérifiée et n'est pas le site publié.</p>": "<p><b>⚠ Internal preview.</b> This file is a working build meant for editorial review: it contains unverified research and is not the published site.</p>", "<h3>Tags de source</h3>": "<h3>Source tags</h3>", "<p>Chaque chiffre, citation ou donnée porte un tag indiquant sa nature :</p>": "<p>Every figure, quotation or item of data carries a tag indicating what it is:</p>", "<li><span class=\"stag stag-O\">O</span> officiel (Insee, JO, résultat de scrutin)</li>": "<li><span class=\"stag stag-O\">O</span> official (national statistics office, official journal, election results)</li>", "<li><span class=\"stag stag-SP\">SP</span> source primaire (vidéo intégrale, communiqué du parti)</li>": "<li><span class=\"stag stag-SP\">SP</span> primary source (full video, party statement)</li>", "<li><span class=\"stag stag-M\">M</span> média (à remonter vers la source primaire)</li>": "<li><span class=\"stag stag-M\">M</span> media report (to be traced back to the primary source)</li>", "<li><span class=\"stag stag-W\">W</span> Wikipédia (source secondaire — citer l'URL + date)</li>": "<li><span class=\"stag stag-W\">W</span> Wikipedia (secondary source — URL + access date required)</li>", "<li><span class=\"stag stag-E\">E</span> estimation / projection / interprétation</li>": "<li><span class=\"stag stag-E\">E</span> estimate / projection / interpretation</li>", "<p><b>Zéro chiffre sans source + date.</b> Toute donnée non sourcée reste en statut « draft ».</p>": "<p><b>No figure without a source and a date.</b> Any unsourced item stays at “draft” status.</p>", "<h3>Archivage des sources</h3>": "<h3>Archiving of sources</h3>", "<p>Les sources primaires sont archivées (Wayback Machine / archive.today) au moment de l'usage — les contenus politiques disparaissent ou sont édités. Chaque note Source porte une URL d'origine et une URL d'archive.</p>": "<p>Primary sources are archived (Wayback Machine / archive.today) at the moment they are used — political content gets deleted or quietly edited. Every Source entry carries both an original URL and an archive URL.</p>", "<h3>Neutralité — principe non négociable</h3>": "<h3>Neutrality — a non-negotiable principle</h3>", "<p>Cette base ne recommande <b>jamais</b> un vote, ne hiérarchise <b>jamais</b> les partis, n'emploie <b>jamais</b> de vocabulaire de verdict (« bon », « mauvais », « vrai », « faux »). Les confrontations juxtaposent les éléments — <b>le lecteur juge</b>.</p>": "<p>This database <b>never</b> recommends a vote, <b>never</b> ranks the parties, and <b>never</b> uses the vocabulary of verdicts (“good”, “bad”, “true”, “false”). Comparisons place the elements side by side — <b>you be the judge</b>.</p>", "<h3>Tribunes — la couche d'opinion, séparée</h3>": "<h3>Op-eds — the opinion layer, kept separate</h3>", "<p>La rubrique <a onclick=\"go('list-Articles')\"><b>Tribunes</b></a> est la <b>seule</b> zone du site où une opinion est exprimée, et elle existe parce qu'elle est <b>étiquetée</b> : chaque tribune est <b>signée</b>, écrite à la première personne, et porte un bandeau d'identification en tête de page.</p>": "<p>The <a onclick=\"go('list-Articles')\"><b>Op-ed</b></a> section is the <b>only</b> part of the site where an opinion is expressed, and it exists precisely because it is <b>labelled</b>: every op-ed is <b>signed</b>, written in the first person, and carries an identification banner at the top of the page.</p>", "<p>Ce que la tribune change : son auteur peut argumenter et prendre parti ; la règle « juxtaposer sans verdict » ne s'y applique pas.</p>": "<p>What an op-ed changes: its author may argue a case and take a side; the “present both sides, pass no verdict” rule does not apply inside it.</p>", "<p>Ce qu'elle ne change pas :</p>": "<p>What it does not change:</p>", "<li><b>Aucune consigne de vote</b> — ni dans les tribunes, ni ailleurs sur ce site.</li>": "<li><b>No voting recommendation</b> — not in the op-eds, not anywhere else on this site.</li>", "<li><b>Aucune attaque personnelle</b> — on y critique une position, un acte public, un chiffre, jamais une personne.</li>": "<li><b>No personal attacks</b> — an op-ed criticises a position, a public act, a figure; never a person.</li>", "<li><b>Le fait reste sourcé</b> : mêmes exigences de source, de date et de tag que dans la base. L'opinion est libre ; le fait sur lequel elle s'appuie ne l'est pas.</li>": "<li><b>Facts stay sourced</b>: the same requirements for source, date and tag as in the database. Opinion is free; the fact it rests on is not.</li>", "<li><b>Étanchéité</b> : une tribune n'est jamais citée comme source par la base neutre. Le lien va de la tribune vers les faits, jamais l'inverse.</li>": "<li><b>Separation</b>: an op-ed is never cited as a source by the neutral database. Links run from the op-ed to the facts, never the other way round.</li>", "<p>Le taux de validation affiché ci-dessus porte sur la <b>base neutre uniquement</b> — les tribunes sont comptées à part.</p>": "<p>The validation rate shown above covers the <b>neutral database only</b> — op-eds are counted separately.</p>", "<h3>Dispositifs rhétoriques</h3>": "<h3>Rhetorical devices</h3>", "<p>Les déclarations peuvent être taggées avec leur dispositif rhétorique principal — un outil pédagogique pour repérer comment un propos est construit, sans juger la personne :</p>": "<p>Statements may be tagged with their main rhetorical device — an educational tool for spotting how an argument is built, without passing judgement on the speaker:</p>", "<li><b>euphémisme</b> — adoucir un terme pour en réduire la charge</li>": "<li><b>euphemism</b> — softening a term to reduce its force</li>", "<li><b>métaphore</b> — analogie imagée pour cadrer un sujet</li>": "<li><b>metaphor</b> — an image used to frame a subject</li>", "<li><b>prolepse</b> — anticiper et désamorcer une objection</li>": "<li><b>prolepsis</b> — anticipating and defusing an objection</li>", "<li><b>fausse équivalence</b> — présenter deux choses comme égales quand elles ne le sont pas</li>": "<li><b>false equivalence</b> — presenting two things as comparable when they are not</li>", "<li><b>argument d'autorité</b> — s'appuyer sur un statut plutôt que sur un fait</li>": "<li><b>appeal to authority</b> — relying on status rather than on a fact</li>", "<li><b>recadrage</b> — changer le cadre du débat</li>": "<li><b>reframing</b> — shifting the terms of the debate</li>", "<li><b>déplacement de sujet</b> — répondre à une autre question que celle posée</li>": "<li><b>changing the subject</b> — answering a question other than the one asked</li>", "<p>X/Twitter est une <b>couche de veille uniquement</b> — jamais cité comme source sur le site. Toute information issue d'un réseau social est remontée à sa <b>source primaire</b> (vidéo intégrale, communiqué officiel) avant publication.</p>": "<p>X/Twitter is a <b>monitoring layer only</b> — never cited as a source on this site. Anything spotted on social media is traced back to its <b>primary source</b> (full video, official statement) before publication.</p>", "<h3>Contenu de la base</h3>": "<h3>What the database contains</h3>", "Confrontations": "Side-by-side", "Écarts": "Discrepancies", "Actualité": "Latest", "Études": "Studies", "Silences": "Silences", "Tribunes": "Op-eds", "Personnalités": "Figures", "Programmes": "Manifestos", "Mesures": "Proposals", "Déclarations": "Statements", "Parti": "Party", "Personnalité": "Figure", "Étude": "Study", "Confrontation": "Side-by-side", "Source": "Source", "Thème": "Topic", "Tribune": "Op-ed"}, "ru": {"Rechercher…": "Поиск…", "Mentions légales": "Правовая информация", "Base de recherche neutre — sans but lucratif, sans publicité, non financée par un parti. Aucun cookie, aucun traceur, aucune donnée personnelle collectée.": "Нейтральная исследовательская база — некоммерческая, без рекламы, не финансируется ни одной партией. Никаких cookie, трекеров и сбора персональных данных.", "__LANGNOTE__": "<b>Переведён интерфейс, но не исследовательский материал.</b> Цитаты, партийные программы и исследования остаются на языке оригинала — французском. Каждая запись здесь построена на дословных цитатах с пометкой типа источника; переведённая цитата перестаёт быть цитатой, а весь смысл этого сайта в том, чтобы вы могли вернуться к документу и проверить его сами. К каждой записи приложен архивированный источник.", "charte des tribunes": "правилами раздела колонок", "Rubrique Tribunes": "Раздел «Колонки»", "Cette page décrit les règles de la rubrique <b>Tribunes</b> — la couche d'<b>opinion signée</b> du site, distincte de la base de recherche neutre.": "На этой странице изложены правила раздела <b>«Колонки»</b> — слоя <b>подписанного мнения</b>, отделённого от нейтральной исследовательской базы.", "Tribune — opinion signée": "Колонка — подписанное мнение", "Ce texte est une <b>tribune signée</b>. Il exprime le point de vue personnel de son auteur et <b>ne relève pas de la base de recherche neutre</b> de ce site. Les faits qui y sont cités restent sourcés et tagués comme partout ailleurs ; l'interprétation qui en est faite n'engage que l'auteur. <b>Aucune consigne de vote n'est donnée ici.</b>": "Это <b>подписанная авторская колонка</b>. Она выражает личную точку зрения автора и <b>не входит в нейтральную исследовательскую базу</b> этого сайта. Приводимые в ней факты снабжены источниками и пометками так же, как и везде; их трактовка остаётся на совести автора. <b>Никаких призывов голосовать здесь нет.</b>", "Voir la %1.": "См. %1.", "Accueil": "Главная", "Base de recherche · Présidentielle 2027": "Исследовательская база · Президентские выборы во Франции 2027", "Les faits, côte à côte.": "Факты рядом друг с другом.", "Pour chaque parti : ses prises de parole, son programme officiel et les études qui s'y rapportent — rassemblés et sourcés.": "По каждой партии: высказывания её представителей, официальная программа и относящиеся к делу исследования — собраны и снабжены ссылками на источники.", "On montre les deux éléments. <b>Le lecteur juge.</b> Jamais de recommandation de vote, jamais de hiérarchie entre partis.": "Показаны обе стороны. <b>Судит читатель.</b> Никаких рекомендаций, за кого голосовать, и никакого ранжирования партий.", "<b>%1 notes validées sur %2</b> (%3%)": "<b>Проверено записей: %1 из %2</b> (%3%)", "seules les notes « publie » sont publiées ici, avec les sources qu'elles citent ; les %1 notes encore en vérification restent hors du site.": "здесь публикуются только записи со статусом «опубликовано» вместе с источниками, на которые они ссылаются; записи, ещё находящиеся на проверке, на сайт не попадают (их %1).", "<b>aperçu interne</b> : les %1 notes « draft » / « relu » sont affichées avec leur badge de statut et ne figurent pas sur le site public.": "<b>внутренний предпросмотр</b>: записи со статусом «черновик» / «вторая вычитка» показаны здесь с пометкой статуса и отсутствуют на публичном сайте (их %1).", "Voir la méthode →": "Как это устроено →", "Voir tout :": "Показать всё:", "Thèmes": "Темы", "Partis": "Партии", "ordre alphabétique": "в алфавитном порядке", "Actualité récente": "Последние заявления", "tout voir ›": "показать всё ›", "Déclaration": "Заявление", "Outils d'analyse": "Инструменты анализа", "Écarts documentés": "Задокументированные расхождения", "%1 confrontation(s) avec écart": "сопоставлений с расхождением: %1", "Silences thématiques": "Темы, обойдённые молчанием", "Thèmes sans mesure par parti": "Темы, по которым у партии нет предложений", "Méthode": "Метод", "Comment cette base est construite": "Как устроена эта база", "Éditeur &amp; directeur de la publication": "Издатель и ответственный за публикацию", "Ce site est édité <b>à titre non professionnel</b> par un particulier publiant sous le pseudonyme <b>demoxzz</b>. <i>Poli_éthique</i> est le nom du site, pas celui de l'éditeur.": "Сайт издаётся <b>на непрофессиональной основе</b> частным лицом, публикующимся под псевдонимом <b>demoxzz</b>. <i>Poli_éthique</i> — это название сайта, а не псевдоним издателя.", "Conformément à l'article 6, III, 2° de la loi n°2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN), l'éditeur — personne physique éditant à titre non professionnel — a choisi de ne pas rendre publiques ses coordonnées personnelles ; son identité est tenue à la disposition de l'hébergeur et, le cas échéant, de l'autorité judiciaire.": "В соответствии со статьёй 6, III, 2° французского закона № 2004-575 от 21 июня 2004 года о доверии в цифровой экономике (LCEN) издатель — физическое лицо, публикующееся на непрофессиональной основе — предпочёл не раскрывать свои личные контактные данные; его личность предоставлена в распоряжение хостинг-провайдера и, при необходимости, судебных органов.", "Hébergeur": "Хостинг-провайдер", "Netlify, Inc. — 2325 3rd Street, Suite 215, San Francisco, CA 94107, États-Unis — <a href=\"https://www.netlify.com\" target=\"_blank\" rel=\"noopener\">www.netlify.com</a>.": "Netlify, Inc. — 2325 3rd Street, Suite 215, San Francisco, CA 94107, США — <a href=\"https://www.netlify.com\" target=\"_blank\" rel=\"noopener\">www.netlify.com</a>.", "Objet &amp; neutralité": "Назначение и нейтральность", "Base de recherche documentaire et pédagogique sur la vie politique française. Elle présente faits, programmes et études de manière <b>factuelle et neutre</b>, <b>sans jamais recommander de vote ni hiérarchiser les partis</b>. Aucune synthèse ne conclut en faveur d'un camp.": "Документальная и просветительская исследовательская база о политической жизни Франции. Факты, программы и исследования подаются <b>фактологично и нейтрально</b>, <b>без рекомендаций, за кого голосовать, и без ранжирования партий</b>. Ни один обзор на сайте не делает вывод в пользу одной из сторон.", "Site <b>sans but lucratif</b>, sans publicité, <b>non financé par un parti, un candidat ou un groupement politique</b>.": "<b>Некоммерческий</b> сайт без рекламы, <b>не финансируемый ни партией, ни кандидатом, ни политическим объединением</b>.", "Le site comporte une rubrique distincte, <b>Tribunes</b>, qui regroupe des <b>textes d'opinion signés</b>. Ces textes sont identifiés comme tels par un bandeau en tête de chaque page, n'engagent que leur auteur, <b>ne font pas partie de la base documentaire neutre</b> et ne sont jamais utilisés comme source par celle-ci. Comme le reste du site, ils <b>ne comportent aucun appel au vote</b> et les faits qu'ils citent sont sourcés et datés.": "На сайте есть отдельный раздел <b>«Колонки»</b> с <b>подписанными авторскими текстами</b>. Они обозначены плашкой вверху каждой страницы, выражают позицию только своего автора, <b>не входят в нейтральную базу</b> и никогда не используются ею как источник. Как и весь остальной сайт, они <b>не содержат призывов голосовать</b>, а приводимые в них факты снабжены источниками и датами.", "Cadre électoral": "Избирательный контекст", "En période électorale, ce site s'attache à respecter les principes d'équité et de neutralité rappelés par la Commission nationale de contrôle de la campagne électorale en vue de l'élection présidentielle (CNCCEP). Il ne constitue pas de la propagande électorale et ne procède à aucun appel au vote.": "В период избирательной кампании сайт стремится соблюдать принципы равенства и нейтральности, сформулированные французской Национальной комиссией по контролю за президентской избирательной кампанией (CNCCEP). Он не является предвыборной агитацией и не содержит призывов голосовать.", "Sources &amp; propriété intellectuelle": "Источники и интеллектуальная собственность", "Chaque donnée est sourcée et datée. Les sources primaires (communiqués officiels, résultats de scrutins, sites des partis) et secondaires sont citées et, lorsque c'est possible, archivées (Wayback Machine).": "Каждое сведение снабжено источником и датой. Первичные источники (официальные заявления, результаты голосований, сайты партий) и вторичные источники указываются и, по возможности, архивируются (Wayback Machine).", "Certains contenus s'appuient sur Wikipédia, réutilisée sous licence <b>Creative Commons Attribution-ShareAlike (CC BY-SA)</b> ; les liens et dates de consultation figurent dans les fiches concernées. Les marques, logos et programmes cités demeurent la propriété de leurs auteurs ou partis respectifs.": "Часть материалов опирается на «Википедию», используемую по лицензии <b>Creative Commons Attribution-ShareAlike (CC BY-SA)</b>; ссылки и даты обращения указаны в соответствующих записях. Упомянутые товарные знаки, логотипы и программы остаются собственностью их авторов или партий.", "Données personnelles &amp; cookies": "Персональные данные и cookie", "Ce site est <b>statique</b> : il ne dépose <b>aucun cookie</b>, n'utilise <b>aucun traceur</b> ni outil de mesure d'audience, et ne collecte <b>aucune donnée personnelle</b> des visiteurs.": "Это <b>статический</b> сайт: он не устанавливает <b>никаких cookie</b>, не использует <b>никаких трекеров</b> или систем веб-аналитики и не собирает <b>никаких персональных данных</b> посетителей.", "Pour toute demande (droit de réponse, correction d'une donnée, exercice des droits « informatique et libertés » / RGPD) : <a href=\"mailto:presidentielles2027.contact@gmail.com\">presidentielles2027.contact@gmail.com</a>.": "По любым обращениям (право на ответ, исправление сведений, реализация прав на защиту персональных данных по GDPR): <a href=\"mailto:presidentielles2027.contact@gmail.com\">presidentielles2027.contact@gmail.com</a>.", "Responsabilité": "Ответственность", "Malgré le soin apporté aux vérifications, des erreurs restent possibles ; toute correction signalée à l'adresse de contact sera étudiée. Les contenus en statut « draft » ou « relu » relèvent de la recherche interne et ne constituent pas des informations validées.": "Несмотря на тщательность проверок, ошибки остаются возможными; любое исправление, присланное на контактный адрес, будет рассмотрено. Материалы со статусом «черновик» или «вторая вычитка» относятся к внутренней работе и не являются проверенной информацией.", "Dernière mise à jour :": "Последнее обновление:", "<span class=\"kicker\">Comment cette base est construite</span>": "<span class=\"kicker\">Как устроена эта база</span>", "<h2 class=\"note-title\">Méthode</h2>": "<h2 class=\"note-title\">Метод</h2>", "<h3>Taux de validation</h3>": "<h3>Доля проверенных записей</h3>", "%1% des notes de la base sont en statut « publie » (validées, sourcées, relues)": "%1% записей базы имеют статус «опубликовано» (проверены, снабжены источниками, вычитаны)", ". Seules ces notes sont exportées vers le site : les %1 autres restent de la recherche interne.": ". Только они выгружаются на сайт; остальные остаются внутренними рабочими материалами (их %1).", ". ⚠ Ce rendu est un <b>aperçu interne</b> : il affiche aussi les %1 notes « draft » / « relu », qui sont absentes du site public.": ". ⚠ Эта сборка — <b>внутренний предпросмотр</b>: в ней показаны и записи со статусом «черновик» / «вторая вычитка» (их %1), которых нет на публичном сайте.", "<h3>Workflow éditorial</h3>": "<h3>Редакционный процесс</h3>", "<p>Chaque note passe par trois statuts avant publication :</p>": "<p>Каждая запись проходит три статуса до публикации:</p>", "<ul><li><b>draft</b> — note en cours, données non vérifiées. Non exportée.</li>": "<ul><li><b>черновик</b> — запись в работе, данные не проверены. На сайт не выгружается.</li>", "<li><b>relu</b> — reprise lors d'une passe de relecture distincte de la rédaction : vérification de l'attribution, du sourcing et de la neutralité. Non exportée.</li>": "<li><b>вторая вычитка</b> — повторный просмотр отдельно от написания: проверка атрибуции, источников и нейтральности. На сайт не выгружается.</li>", "<li><b>publie</b> — validée, sourcée, neutre. Seul statut exporté vers le site.</li></ul>": "<li><b>опубликовано</b> — проверено, снабжено источниками, нейтрально. Единственный статус, выгружаемый на сайт.</li></ul>", "<p><b>Ce que cette relecture est, et ce qu'elle n'est pas.</b> Ce site est tenu par une seule personne, sous le pseudonyme <b>demoxzz</b>. La relecture est donc une <i>seconde passe</i>, séparée dans le temps de la rédaction — pas un second regard indépendant. Elle attrape les erreurs d'attribution, les chiffres non remontés à la source et les formulations qui tranchent ; elle ne corrige pas les angles morts que l'auteur partage avec lui-même. C'est la limite assumée de cette base, et c'est pourquoi chaque donnée reste accompagnée de sa source : le contrôle réel, c'est que vous puissiez remonter au document vous-même.</p>": "<p><b>Что такое эта вычитка и чем она не является.</b> Сайт ведёт один человек под псевдонимом <b>demoxzz</b>. Поэтому вычитка — это <i>второй проход</i>, отделённый по времени от написания, а не независимый взгляд со стороны. Она ловит ошибки атрибуции, цифры, не возведённые к первоисточнику, и формулировки, выносящие приговор; она не устраняет слепых зон, которые автор разделяет сам с собой. Это признаваемый предел данной базы — и именно поэтому за каждым сведением сохраняется его источник: настоящая проверка состоит в том, что вы сами можете дойти до документа.</p>", "<p>Une exception, par souci de vérifiabilité : les notes <b>Sources</b> — matière de référence réduite à un type, une URL d'origine et son archive — accompagnent la base afin que chaque donnée publiée reste traçable. Elles ne portent pas d'analyse et ne suivent donc pas le cycle de relecture ci-dessus.</p>": "<p>Одно исключение, ради проверяемости: записи типа <b>«Источник»</b> — справочный материал, сведённый к типу, исходному URL и его архивной копии, — сопровождают базу, чтобы каждое опубликованное сведение оставалось прослеживаемым. Они не содержат анализа и потому не проходят описанный выше цикл вычитки.</p>", "<p><b>⚠ Aperçu interne.</b> Ce fichier est un rendu de travail, destiné à la relecture éditoriale : il contient de la recherche non vérifiée et n'est pas le site publié.</p>": "<p><b>⚠ Внутренний предпросмотр.</b> Этот файл — рабочая сборка для редакционной вычитки: он содержит непроверенные материалы и не является опубликованным сайтом.</p>", "<h3>Tags de source</h3>": "<h3>Пометки источников</h3>", "<p>Chaque chiffre, citation ou donnée porte un tag indiquant sa nature :</p>": "<p>Каждая цифра, цитата или сведение снабжены пометкой о том, что это такое:</p>", "<li><span class=\"stag stag-O\">O</span> officiel (Insee, JO, résultat de scrutin)</li>": "<li><span class=\"stag stag-O\">O</span> официальный источник (статистическое ведомство, официальный вестник, результаты выборов)</li>", "<li><span class=\"stag stag-SP\">SP</span> source primaire (vidéo intégrale, communiqué du parti)</li>": "<li><span class=\"stag stag-SP\">SP</span> первичный источник (полное видео, заявление партии)</li>", "<li><span class=\"stag stag-M\">M</span> média (à remonter vers la source primaire)</li>": "<li><span class=\"stag stag-M\">M</span> сообщение СМИ (подлежит возведению к первоисточнику)</li>", "<li><span class=\"stag stag-W\">W</span> Wikipédia (source secondaire — citer l'URL + date)</li>": "<li><span class=\"stag stag-W\">W</span> «Википедия» (вторичный источник — нужны URL и дата обращения)</li>", "<li><span class=\"stag stag-E\">E</span> estimation / projection / interprétation</li>": "<li><span class=\"stag stag-E\">E</span> оценка / прогноз / трактовка</li>", "<p><b>Zéro chiffre sans source + date.</b> Toute donnée non sourcée reste en statut « draft ».</p>": "<p><b>Ни одной цифры без источника и даты.</b> Любое сведение без источника остаётся в статусе «черновик».</p>", "<h3>Archivage des sources</h3>": "<h3>Архивирование источников</h3>", "<p>Les sources primaires sont archivées (Wayback Machine / archive.today) au moment de l'usage — les contenus politiques disparaissent ou sont édités. Chaque note Source porte une URL d'origine et une URL d'archive.</p>": "<p>Первичные источники архивируются (Wayback Machine / archive.today) в момент использования — политические материалы исчезают или незаметно правятся. В каждой записи «Источник» указаны и исходный URL, и ссылка на архивную копию.</p>", "<h3>Neutralité — principe non négociable</h3>": "<h3>Нейтральность — принцип, не подлежащий обсуждению</h3>", "<p>Cette base ne recommande <b>jamais</b> un vote, ne hiérarchise <b>jamais</b> les partis, n'emploie <b>jamais</b> de vocabulaire de verdict (« bon », « mauvais », « vrai », « faux »). Les confrontations juxtaposent les éléments — <b>le lecteur juge</b>.</p>": "<p>Эта база <b>никогда</b> не советует, за кого голосовать, <b>никогда</b> не ранжирует партии и <b>никогда</b> не использует оценочную лексику («хорошо», «плохо», «правда», «ложь»). Сопоставления просто ставят элементы рядом — <b>судит читатель</b>.</p>", "<h3>Tribunes — la couche d'opinion, séparée</h3>": "<h3>Колонки — слой мнения, отделённый от базы</h3>", "<p>La rubrique <a onclick=\"go('list-Articles')\"><b>Tribunes</b></a> est la <b>seule</b> zone du site où une opinion est exprimée, et elle existe parce qu'elle est <b>étiquetée</b> : chaque tribune est <b>signée</b>, écrite à la première personne, et porte un bandeau d'identification en tête de page.</p>": "<p>Раздел <a onclick=\"go('list-Articles')\"><b>«Колонки»</b></a> — <b>единственная</b> часть сайта, где высказывается мнение, и существует она именно потому, что <b>помечена</b>: каждая колонка <b>подписана</b>, написана от первого лица и снабжена опознавательной плашкой вверху страницы.</p>", "<p>Ce que la tribune change : son auteur peut argumenter et prendre parti ; la règle « juxtaposer sans verdict » ne s'y applique pas.</p>": "<p>Что меняет колонка: её автор вправе отстаивать позицию и занимать сторону; правило «показать обе стороны и не выносить приговор» внутри неё не действует.</p>", "<p>Ce qu'elle ne change pas :</p>": "<p>Что она не меняет:</p>", "<li><b>Aucune consigne de vote</b> — ni dans les tribunes, ni ailleurs sur ce site.</li>": "<li><b>Никаких призывов голосовать</b> — ни в колонках, ни где-либо ещё на этом сайте.</li>", "<li><b>Aucune attaque personnelle</b> — on y critique une position, un acte public, un chiffre, jamais une personne.</li>": "<li><b>Никаких переходов на личности</b> — критикуется позиция, публичное действие, цифра, но никогда не человек.</li>", "<li><b>Le fait reste sourcé</b> : mêmes exigences de source, de date et de tag que dans la base. L'opinion est libre ; le fait sur lequel elle s'appuie ne l'est pas.</li>": "<li><b>Факт остаётся снабжён источником</b>: те же требования к источнику, дате и пометке, что и в базе. Мнение свободно; факт, на который оно опирается, — нет.</li>", "<li><b>Étanchéité</b> : une tribune n'est jamais citée comme source par la base neutre. Le lien va de la tribune vers les faits, jamais l'inverse.</li>": "<li><b>Непроницаемость</b>: колонка никогда не используется нейтральной базой как источник. Ссылки идут от колонки к фактам, но не наоборот.</li>", "<p>Le taux de validation affiché ci-dessus porte sur la <b>base neutre uniquement</b> — les tribunes sont comptées à part.</p>": "<p>Приведённая выше доля проверенных записей относится <b>только к нейтральной базе</b> — колонки считаются отдельно.</p>", "<h3>Dispositifs rhétoriques</h3>": "<h3>Риторические приёмы</h3>", "<p>Les déclarations peuvent être taggées avec leur dispositif rhétorique principal — un outil pédagogique pour repérer comment un propos est construit, sans juger la personne :</p>": "<p>Заявления могут быть помечены основным риторическим приёмом — это учебный инструмент, позволяющий увидеть, как построено высказывание, не вынося оценки говорящему:</p>", "<li><b>euphémisme</b> — adoucir un terme pour en réduire la charge</li>": "<li><b>эвфемизм</b> — смягчение слова, чтобы снизить его силу</li>", "<li><b>métaphore</b> — analogie imagée pour cadrer un sujet</li>": "<li><b>метафора</b> — образ, задающий рамку восприятия темы</li>", "<li><b>prolepse</b> — anticiper et désamorcer une objection</li>": "<li><b>пролепсис</b> — упреждение и обезвреживание возражения</li>", "<li><b>fausse équivalence</b> — présenter deux choses comme égales quand elles ne le sont pas</li>": "<li><b>ложная эквивалентность</b> — подача двух несопоставимых вещей как равнозначных</li>", "<li><b>argument d'autorité</b> — s'appuyer sur un statut plutôt que sur un fait</li>": "<li><b>аргумент к авторитету</b> — опора на статус вместо факта</li>", "<li><b>recadrage</b> — changer le cadre du débat</li>": "<li><b>смена рамки</b> — переопределение условий спора</li>", "<li><b>déplacement de sujet</b> — répondre à une autre question que celle posée</li>": "<li><b>подмена темы</b> — ответ не на тот вопрос, который был задан</li>", "<p>X/Twitter est une <b>couche de veille uniquement</b> — jamais cité comme source sur le site. Toute information issue d'un réseau social est remontée à sa <b>source primaire</b> (vidéo intégrale, communiqué officiel) avant publication.</p>": "<p>X/Twitter — <b>только слой мониторинга</b>, он никогда не указывается на сайте как источник. Любые сведения, замеченные в соцсетях, перед публикацией возводятся к <b>первоисточнику</b> (полное видео, официальное заявление).</p>", "<h3>Contenu de la base</h3>": "<h3>Содержимое базы</h3>", "Confrontations": "Сопоставления", "Écarts": "Расхождения", "Actualité": "Новое", "Études": "Исследования", "Silences": "Умолчания", "Tribunes": "Колонки", "Personnalités": "Политики", "Programmes": "Программы", "Mesures": "Предложения", "Déclarations": "Заявления", "Parti": "Партия", "Personnalité": "Политик", "Étude": "Исследование", "Confrontation": "Сопоставление", "Source": "Источник", "Thème": "Тема", "Tribune": "Колонка"}};
+let LANG=(document.documentElement.getAttribute("data-lang")||"fr");
+// %1, %2… = fragments non traduisibles (chiffres, noms propres, balises).
+function t(s){
+  let o=(LANG!=="fr"&&I18N[LANG]&&I18N[LANG][s])||s;
+  for(let i=1;i<arguments.length;i++) o=o.split("%"+i).join(arguments[i]);
+  return o;
+}
+function setLang(l){
+  if(l!=="fr"&&l!=="en"&&l!=="ru") return;
+  LANG=l;
+  document.documentElement.setAttribute("lang",l);
+  document.documentElement.setAttribute("data-lang",l);
+  try{localStorage.setItem("pe-lang",l);}catch(e){}
+  syncLangBtn(); applyChrome(); render();
+}
+function syncLangBtn(){
+  document.querySelectorAll("#langSel .lg").forEach(b=>{
+    b.classList.toggle("on",b.getAttribute("data-l")===LANG);
+  });
+}
+// Les quelques libellés qui vivent dans le HTML statique (hors render()).
+function applyChrome(){
+  const nav=[["home","Accueil"],["list-Partis","Partis"],["list-Themes","Thèmes"],
+    ["list-Confrontations","Confrontations"],["ecarts","Écarts"],["actu","Actualité"],
+    ["list-Etudes","Études"],["silences","Silences"],["methode","Méthode"],["list-Articles","Tribunes"]];
+  document.querySelectorAll("#nav a").forEach((a,i)=>{ if(nav[i]) a.textContent=t(nav[i][1]); });
+  const q=document.getElementById("q"); if(q) q.placeholder=t("Rechercher…");
+  const ml=document.getElementById("footMentions"); if(ml) ml.textContent=t("Mentions légales");
+  const fn=document.getElementById("footNote");
+  if(fn) fn.textContent=t("Base de recherche neutre — sans but lucratif, sans publicité, non financée par un parti. Aucun cookie, aucun traceur, aucune donnée personnelle collectée.");
+  syncThemeIcon();
+}
+
+// Dit au lecteur non francophone ce qui est traduit et ce qui ne l'est pas.
+// Rien à signaler en français : le bandeau ne s'affiche que dans les autres langues.
+function langNote(){
+  if(LANG==="fr") return "";
+  return `<div class="lang-note">${t("__LANGNOTE__")}</div>`;
+}
 
 // Thème — l'icône reflète ce vers quoi le clic bascule, pas l'état courant.
 function syncThemeIcon(){
@@ -602,28 +685,25 @@ function metaBadges(n){
 // le lecteur quitte la base neutre pour une opinion signée.
 function charteLink(){
   const c=Object.values(GRAPH).find(x=>x.folder==="Articles" && x.meta.registre==="charte");
-  return c?`<a onclick="go('${c.id}')">charte des tribunes</a>`:"charte des tribunes";
+  return c?`<a onclick="go('${c.id}')">${t("charte des tribunes")}</a>`:t("charte des tribunes");
 }
 
 function tribuneFlag(n){
   if(n.folder!=="Articles") return "";
   const charte=charteLink();
   if(n.meta.registre==="charte"){
-    return `<div class="tribune-flag"><span class="hd">Rubrique Tribunes</span>
-      Cette page décrit les règles de la rubrique <b>Tribunes</b> — la couche d'<b>opinion signée</b> du site,
-      distincte de la base de recherche neutre.</div>`;
+    return `<div class="tribune-flag"><span class="hd">${t("Rubrique Tribunes")}</span>
+      ${t("Cette page décrit les règles de la rubrique <b>Tribunes</b> — la couche d'<b>opinion signée</b> du site, distincte de la base de recherche neutre.")}</div>`;
   }
-  return `<div class="tribune-flag"><span class="hd">Tribune — opinion signée</span>
-    Ce texte est une <b>tribune signée</b>. Il exprime le point de vue personnel de son auteur et
-    <b>ne relève pas de la base de recherche neutre</b> de ce site. Les faits qui y sont cités restent
-    sourcés et tagués comme partout ailleurs ; l'interprétation qui en est faite n'engage que l'auteur.
-    <b>Aucune consigne de vote n'est donnée ici.</b> Voir la ${charte}.</div>`;
+  return `<div class="tribune-flag"><span class="hd">${t("Tribune — opinion signée")}</span>
+    ${t("Ce texte est une <b>tribune signée</b>. Il exprime le point de vue personnel de son auteur et <b>ne relève pas de la base de recherche neutre</b> de ce site. Les faits qui y sont cités restent sourcés et tagués comme partout ailleurs ; l'interprétation qui en est faite n'engage que l'auteur. <b>Aucune consigne de vote n'est donnée ici.</b>")}
+    ${t("Voir la %1.",charte)}</div>`;
 }
 
 function noteView(id){
   const n=GRAPH[id];if(!n)return home();
   CTX=n; // contexte pour résoudre this.* dans les vues Dataview
-  let h=`<div class="crumb"><a onclick="go('home')">Accueil</a> › ${esc(FOLDER_LABEL[n.folder]||n.folder)} › ${esc(n.title)}</div>`;
+  let h=`<div class="crumb"><a onclick="go('home')">${t("Accueil")}</a> › ${esc(t(FOLDER_LABEL[n.folder]||n.folder))} › ${esc(n.title)}</div>`;
   h+=tribuneFlag(n);
   h+=`<h2 class="note-title">${esc(n.title)}</h2>`;
   if(n.folder==="Articles" && n.meta.auteur){
@@ -872,40 +952,41 @@ function home(){
   const valPct=Math.round(pub/totEd*100);
   const nbTrib=byFolder("Articles").filter(n=>n.meta.registre==="tribune" && n.meta.statut_editorial==="publie").length;
   let h=`<div class="hero">
-    <span class="kicker">Base de recherche · Présidentielle 2027</span>
-    <h1>Les faits, côte à côte.</h1>
-    <p>Pour chaque parti : ses prises de parole, son programme officiel et les études qui s'y rapportent — rassemblés et sourcés.</p>
-    <div class="tagline">On montre les deux éléments. <b>Le lecteur juge.</b> Jamais de recommandation de vote, jamais de hiérarchie entre partis.</div>
-    <div class="tagline"><b>${pub} notes validées sur ${totEd}</b> (${valPct}%) — ${PUBLIC_BUILD
-      ?`seules les notes « publie » sont publiées ici, avec les sources qu'elles citent ; les ${STATS.non_publie} notes encore en vérification restent hors du site.`
-      :`<b>aperçu interne</b> : les ${STATS.non_publie} notes « draft » / « relu » sont affichées avec leur badge de statut et ne figurent pas sur le site public.`} <a onclick="go('methode')">Voir la méthode →</a></div>
+    <span class="kicker">${t("Base de recherche · Présidentielle 2027")}</span>
+    <h1>${t("Les faits, côte à côte.")}</h1>
+    <p>${t("Pour chaque parti : ses prises de parole, son programme officiel et les études qui s'y rapportent — rassemblés et sourcés.")}</p>
+    <div class="tagline">${t("On montre les deux éléments. <b>Le lecteur juge.</b> Jamais de recommandation de vote, jamais de hiérarchie entre partis.")}</div>
+    <div class="tagline">${t("<b>%1 notes validées sur %2</b> (%3%)",pub,totEd,valPct)} — ${PUBLIC_BUILD
+      ?t("seules les notes « publie » sont publiées ici, avec les sources qu'elles citent ; les %1 notes encore en vérification restent hors du site.",STATS.non_publie)
+      :t("<b>aperçu interne</b> : les %1 notes « draft » / « relu » sont affichées avec leur badge de statut et ne figurent pas sur le site public.",STATS.non_publie)} <a onclick="go('methode')">${t("Voir la méthode →")}</a></div>
   </div>`;
+  h+=langNote();
   h+='<div class="stat-row">';
   [["Partis","Partis"],["Personnalites","Personnalités"],["Programmes","Programmes"],
    ["Mesures","Mesures"],["Etudes","Études"],["Confrontations","Confrontations"],["Declarations","Déclarations"],["Themes","Thèmes"]].forEach(([k,l])=>{
-    h+=`<div class="stat" onclick="go('list-${k}')" title="Voir tout : ${l}"><div class="n">${c[k]}</div><div class="l">${l}</div></div>`;});
+    h+=`<div class="stat" onclick="go('list-${k}')" title="${t("Voir tout :")} ${t(l)}"><div class="n">${c[k]}</div><div class="l">${t(l)}</div></div>`;});
   h+='</div>';
-  h+=sectionH("Thèmes",themes.length)+'<div class="grid">';
+  h+=sectionH(t("Thèmes"),themes.length)+'<div class="grid">';
   themes.forEach(n=>h+=`<div class="card" onclick="go('${n.id}')"><h3><a onclick="go('${n.id}')">${esc(n.title)}</a></h3></div>`);
   h+='</div>';
-  h+=sectionH("Partis","ordre alphabétique")+'<div class="grid">';
+  h+=sectionH(t("Partis"),t("ordre alphabétique"))+'<div class="grid">';
   partis.forEach(n=>h+=partiCard(n));h+='</div>';
   const declas=byFolder("Declarations").filter(n=>!/EXEMPLE|Exemple/.test(n.title))
     .sort((a,b)=>String(b.meta["date-declaration"]||"").localeCompare(String(a.meta["date-declaration"]||"")));
   if(declas.length){
-    h+=`<div class="section-h"><h2>Actualité récente</h2><span class="cnt"><a onclick="go('actu')">tout voir ›</a></span></div><div class="grid">`;
+    h+=`<div class="section-h"><h2>${t("Actualité récente")}</h2><span class="cnt"><a onclick="go('actu')">${t("tout voir ›")}</a></span></div><div class="grid">`;
     declas.slice(0,6).forEach(n=>{
       const sub=[n.meta.parti||n.meta.personnalite||"",n.meta["date-declaration"]||""].filter(Boolean).join(" · ");
-      h+=`<div class="card" onclick="go('${n.id}')"><h3><a onclick="go('${n.id}')">${esc(n.title)}</a></h3><div class="k">${esc(sub)}</div><span class="chip-date">Déclaration${n.meta.theme?" · "+esc(n.meta.theme):""}</span></div>`;
+      h+=`<div class="card" onclick="go('${n.id}')"><h3><a onclick="go('${n.id}')">${esc(n.title)}</a></h3><div class="k">${esc(sub)}</div><span class="chip-date">${t("Déclaration")}${n.meta.theme?" · "+esc(n.meta.theme):""}</span></div>`;
     });
     h+='</div>';
   }
   h+=tribuneHome(nbTrib);
   const ec=byFolder("Confrontations").filter(n=>!/EXEMPLE|Exemple/.test(n.title)).filter(n=>String(n.meta.qualificatif||"").includes("contredit")).length;
-  h+=`<div class="section-h"><h2>Outils d'analyse</h2></div><div class="grid">`;
-  h+=`<div class="card" onclick="go('ecarts')"><h3><a onclick="go('ecarts')">Écarts documentés</a></h3><div class="k">${ec} confrontation(s) avec écart</div></div>`;
-  h+=`<div class="card" onclick="go('silences')"><h3><a onclick="go('silences')">Silences thématiques</a></h3><div class="k">Thèmes sans mesure par parti</div></div>`;
-  h+=`<div class="card" onclick="go('methode')"><h3><a onclick="go('methode')">Méthode</a></h3><div class="k">Comment cette base est construite</div></div>`;
+  h+=`<div class="section-h"><h2>${t("Outils d'analyse")}</h2></div><div class="grid">`;
+  h+=`<div class="card" onclick="go('ecarts')"><h3><a onclick="go('ecarts')">${t("Écarts documentés")}</a></h3><div class="k">${t("%1 confrontation(s) avec écart",ec)}</div></div>`;
+  h+=`<div class="card" onclick="go('silences')"><h3><a onclick="go('silences')">${t("Silences thématiques")}</a></h3><div class="k">${t("Thèmes sans mesure par parti")}</div></div>`;
+  h+=`<div class="card" onclick="go('methode')"><h3><a onclick="go('methode')">${t("Méthode")}</a></h3><div class="k">${t("Comment cette base est construite")}</div></div>`;
   h+='</div>';
   h+=legend();
   return h;
@@ -965,37 +1046,37 @@ const FOLDERS=["Partis","Personnalites","Programmes","Mesures","Etudes","Confron
 
 function mentionsView(){
   CTX=null;
-  return `<div class="crumb"><a onclick="go('home')">Accueil</a> › Mentions légales</div>
-  <h2 class="note-title">Mentions légales</h2>
+  return `<div class="crumb"><a onclick="go('home')">${t("Accueil")}</a> › ${t("Mentions légales")}</div>
+  <h2 class="note-title">${t("Mentions légales")}</h2>
   <div class="legal">
-    <h3>Éditeur &amp; directeur de la publication</h3>
-    <p>Ce site est édité <b>à titre non professionnel</b> par un particulier publiant sous le pseudonyme <b>demoxzz</b>. <i>Poli_éthique</i> est le nom du site, pas celui de l'éditeur.</p>
+    <h3>${t("Éditeur &amp; directeur de la publication")}</h3>
+    <p>${t("Ce site est édité <b>à titre non professionnel</b> par un particulier publiant sous le pseudonyme <b>demoxzz</b>. <i>Poli_éthique</i> est le nom du site, pas celui de l'éditeur.")}</p>
     <p>Contact : <a href="mailto:presidentielles2027.contact@gmail.com">presidentielles2027.contact@gmail.com</a></p>
-    <p>Conformément à l'article 6, III, 2° de la loi n°2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN), l'éditeur — personne physique éditant à titre non professionnel — a choisi de ne pas rendre publiques ses coordonnées personnelles ; son identité est tenue à la disposition de l'hébergeur et, le cas échéant, de l'autorité judiciaire.</p>
+    <p>${t("Conformément à l'article 6, III, 2° de la loi n°2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN), l'éditeur — personne physique éditant à titre non professionnel — a choisi de ne pas rendre publiques ses coordonnées personnelles ; son identité est tenue à la disposition de l'hébergeur et, le cas échéant, de l'autorité judiciaire.")}</p>
 
-    <h3>Hébergeur</h3>
-    <p>Netlify, Inc. — 2325 3rd Street, Suite 215, San Francisco, CA 94107, États-Unis — <a href="https://www.netlify.com" target="_blank" rel="noopener">www.netlify.com</a>.</p>
+    <h3>${t("Hébergeur")}</h3>
+    <p>${t("Netlify, Inc. — 2325 3rd Street, Suite 215, San Francisco, CA 94107, États-Unis — <a href=\"https://www.netlify.com\" target=\"_blank\" rel=\"noopener\">www.netlify.com</a>.")}</p>
 
-    <h3>Objet &amp; neutralité</h3>
-    <p>Base de recherche documentaire et pédagogique sur la vie politique française. Elle présente faits, programmes et études de manière <b>factuelle et neutre</b>, <b>sans jamais recommander de vote ni hiérarchiser les partis</b>. Aucune synthèse ne conclut en faveur d'un camp.</p>
-    <p>Site <b>sans but lucratif</b>, sans publicité, <b>non financé par un parti, un candidat ou un groupement politique</b>.</p>
-    <p>Le site comporte une rubrique distincte, <b>Tribunes</b>, qui regroupe des <b>textes d'opinion signés</b>. Ces textes sont identifiés comme tels par un bandeau en tête de chaque page, n'engagent que leur auteur, <b>ne font pas partie de la base documentaire neutre</b> et ne sont jamais utilisés comme source par celle-ci. Comme le reste du site, ils <b>ne comportent aucun appel au vote</b> et les faits qu'ils citent sont sourcés et datés.</p>
+    <h3>${t("Objet &amp; neutralité")}</h3>
+    <p>${t("Base de recherche documentaire et pédagogique sur la vie politique française. Elle présente faits, programmes et études de manière <b>factuelle et neutre</b>, <b>sans jamais recommander de vote ni hiérarchiser les partis</b>. Aucune synthèse ne conclut en faveur d'un camp.")}</p>
+    <p>${t("Site <b>sans but lucratif</b>, sans publicité, <b>non financé par un parti, un candidat ou un groupement politique</b>.")}</p>
+    <p>${t("Le site comporte une rubrique distincte, <b>Tribunes</b>, qui regroupe des <b>textes d'opinion signés</b>. Ces textes sont identifiés comme tels par un bandeau en tête de chaque page, n'engagent que leur auteur, <b>ne font pas partie de la base documentaire neutre</b> et ne sont jamais utilisés comme source par celle-ci. Comme le reste du site, ils <b>ne comportent aucun appel au vote</b> et les faits qu'ils citent sont sourcés et datés.")}</p>
 
-    <h3>Cadre électoral</h3>
-    <p>En période électorale, ce site s'attache à respecter les principes d'équité et de neutralité rappelés par la Commission nationale de contrôle de la campagne électorale en vue de l'élection présidentielle (CNCCEP). Il ne constitue pas de la propagande électorale et ne procède à aucun appel au vote.</p>
+    <h3>${t("Cadre électoral")}</h3>
+    <p>${t("En période électorale, ce site s'attache à respecter les principes d'équité et de neutralité rappelés par la Commission nationale de contrôle de la campagne électorale en vue de l'élection présidentielle (CNCCEP). Il ne constitue pas de la propagande électorale et ne procède à aucun appel au vote.")}</p>
 
-    <h3>Sources &amp; propriété intellectuelle</h3>
-    <p>Chaque donnée est sourcée et datée. Les sources primaires (communiqués officiels, résultats de scrutins, sites des partis) et secondaires sont citées et, lorsque c'est possible, archivées (Wayback Machine).</p>
-    <p>Certains contenus s'appuient sur Wikipédia, réutilisée sous licence <b>Creative Commons Attribution-ShareAlike (CC BY-SA)</b> ; les liens et dates de consultation figurent dans les fiches concernées. Les marques, logos et programmes cités demeurent la propriété de leurs auteurs ou partis respectifs.</p>
+    <h3>${t("Sources &amp; propriété intellectuelle")}</h3>
+    <p>${t("Chaque donnée est sourcée et datée. Les sources primaires (communiqués officiels, résultats de scrutins, sites des partis) et secondaires sont citées et, lorsque c'est possible, archivées (Wayback Machine).")}</p>
+    <p>${t("Certains contenus s'appuient sur Wikipédia, réutilisée sous licence <b>Creative Commons Attribution-ShareAlike (CC BY-SA)</b> ; les liens et dates de consultation figurent dans les fiches concernées. Les marques, logos et programmes cités demeurent la propriété de leurs auteurs ou partis respectifs.")}</p>
 
-    <h3>Données personnelles &amp; cookies</h3>
-    <p>Ce site est <b>statique</b> : il ne dépose <b>aucun cookie</b>, n'utilise <b>aucun traceur</b> ni outil de mesure d'audience, et ne collecte <b>aucune donnée personnelle</b> des visiteurs.</p>
-    <p>Pour toute demande (droit de réponse, correction d'une donnée, exercice des droits « informatique et libertés » / RGPD) : <a href="mailto:presidentielles2027.contact@gmail.com">presidentielles2027.contact@gmail.com</a>.</p>
+    <h3>${t("Données personnelles &amp; cookies")}</h3>
+    <p>${t("Ce site est <b>statique</b> : il ne dépose <b>aucun cookie</b>, n'utilise <b>aucun traceur</b> ni outil de mesure d'audience, et ne collecte <b>aucune donnée personnelle</b> des visiteurs.")}</p>
+    <p>${t("Pour toute demande (droit de réponse, correction d'une donnée, exercice des droits « informatique et libertés » / RGPD) : <a href=\"mailto:presidentielles2027.contact@gmail.com\">presidentielles2027.contact@gmail.com</a>.")}</p>
 
-    <h3>Responsabilité</h3>
-    <p>Malgré le soin apporté aux vérifications, des erreurs restent possibles ; toute correction signalée à l'adresse de contact sera étudiée. Les contenus en statut « draft » ou « relu » relèvent de la recherche interne et ne constituent pas des informations validées.</p>
+    <h3>${t("Responsabilité")}</h3>
+    <p>${t("Malgré le soin apporté aux vérifications, des erreurs restent possibles ; toute correction signalée à l'adresse de contact sera étudiée. Les contenus en statut « draft » ou « relu » relèvent de la recherche interne et ne constituent pas des informations validées.")}</p>
 
-    <p class="muted" style="margin-top:1.4em">Dernière mise à jour : 2026-10-19.</p>
+    <p class="muted" style="margin-top:1.4em">${t("Dernière mise à jour :")} 2026-10-19.</p>
   </div>`;
 }
 
@@ -1005,66 +1086,66 @@ function methodeView(){
   const totEd=STATS.tot_ed||1;
   const pct=Math.round(pub/totEd*100);
   const counts={};FOLDERS.forEach(f=>counts[f]=byFolder(f).length);
-  let h='<div class="crumb"><a onclick="go(\'home\')">Accueil</a> <span class="sep">›</span> Méthode</div>';
-  h+='<span class="kicker">Comment cette base est construite</span>';
-  h+='<h2 class="note-title">Méthode</h2>';
+  let h='<div class="crumb"><a onclick="go(\'home\')">'+t("Accueil")+'</a> <span class="sep">›</span> '+t("Méthode")+'</div>';
+  h+=t('<span class="kicker">Comment cette base est construite</span>');
+  h+=t('<h2 class="note-title">Méthode</h2>');
   h+='<div class="methode">';
-  h+='<h3>Taux de validation</h3>';
+  h+=t('<h3>Taux de validation</h3>');
   h+='<div class="stat-line">'+pub+' / '+totEd+'</div>';
-  h+='<div class="stat-sub">'+pct+'% des notes de la base sont en statut « publie » (validées, sourcées, relues)'
+  h+='<div class="stat-sub">'+t("%1% des notes de la base sont en statut « publie » (validées, sourcées, relues)",pct)
     +(PUBLIC_BUILD
-      ?'. Seules ces notes sont exportées vers le site : les '+STATS.non_publie+' autres restent de la recherche interne.'
-      :'. ⚠ Ce rendu est un <b>aperçu interne</b> : il affiche aussi les '+STATS.non_publie+' notes « draft » / « relu », qui sont absentes du site public.')
+      ?t(". Seules ces notes sont exportées vers le site : les %1 autres restent de la recherche interne.",STATS.non_publie)
+      :t(". ⚠ Ce rendu est un <b>aperçu interne</b> : il affiche aussi les %1 notes « draft » / « relu », qui sont absentes du site public.",STATS.non_publie))
     +'</div>';
-  h+='<h3>Workflow éditorial</h3>';
-  h+='<p>Chaque note passe par trois statuts avant publication :</p>';
+  h+=t('<h3>Workflow éditorial</h3>');
+  h+=t('<p>Chaque note passe par trois statuts avant publication :</p>');
   h+='<div class="flow"><span class="step">draft</span><span class="arrow">→</span><span class="step">relu</span><span class="arrow">→</span><span class="step">publie</span></div>';
-  h+='<ul><li><b>draft</b> — note en cours, données non vérifiées. Non exportée.</li>';
-  h+='<li><b>relu</b> — reprise lors d\'une passe de relecture distincte de la rédaction : vérification de l\'attribution, du sourcing et de la neutralité. Non exportée.</li>';
-  h+='<li><b>publie</b> — validée, sourcée, neutre. Seul statut exporté vers le site.</li></ul>';
-  h+='<p><b>Ce que cette relecture est, et ce qu\'elle n\'est pas.</b> Ce site est tenu par une seule personne, sous le pseudonyme <b>demoxzz</b>. La relecture est donc une <i>seconde passe</i>, séparée dans le temps de la rédaction — pas un second regard indépendant. Elle attrape les erreurs d\'attribution, les chiffres non remontés à la source et les formulations qui tranchent ; elle ne corrige pas les angles morts que l\'auteur partage avec lui-même. C\'est la limite assumée de cette base, et c\'est pourquoi chaque donnée reste accompagnée de sa source : le contrôle réel, c\'est que vous puissiez remonter au document vous-même.</p>';
-  h+='<p>Une exception, par souci de vérifiabilité : les notes <b>Sources</b> — matière de référence réduite à un type, une URL d\'origine et son archive — accompagnent la base afin que chaque donnée publiée reste traçable. Elles ne portent pas d\'analyse et ne suivent donc pas le cycle de relecture ci-dessus.</p>';
-  if(!PUBLIC_BUILD) h+='<p><b>⚠ Aperçu interne.</b> Ce fichier est un rendu de travail, destiné à la relecture éditoriale : il contient de la recherche non vérifiée et n\'est pas le site publié.</p>';
-  h+='<h3>Tags de source</h3>';
-  h+='<p>Chaque chiffre, citation ou donnée porte un tag indiquant sa nature :</p>';
+  h+=t('<ul><li><b>draft</b> — note en cours, données non vérifiées. Non exportée.</li>');
+  h+=t('<li><b>relu</b> — reprise lors d\'une passe de relecture distincte de la rédaction : vérification de l\'attribution, du sourcing et de la neutralité. Non exportée.</li>');
+  h+=t('<li><b>publie</b> — validée, sourcée, neutre. Seul statut exporté vers le site.</li></ul>');
+  h+=t('<p><b>Ce que cette relecture est, et ce qu\'elle n\'est pas.</b> Ce site est tenu par une seule personne, sous le pseudonyme <b>demoxzz</b>. La relecture est donc une <i>seconde passe</i>, séparée dans le temps de la rédaction — pas un second regard indépendant. Elle attrape les erreurs d\'attribution, les chiffres non remontés à la source et les formulations qui tranchent ; elle ne corrige pas les angles morts que l\'auteur partage avec lui-même. C\'est la limite assumée de cette base, et c\'est pourquoi chaque donnée reste accompagnée de sa source : le contrôle réel, c\'est que vous puissiez remonter au document vous-même.</p>');
+  h+=t('<p>Une exception, par souci de vérifiabilité : les notes <b>Sources</b> — matière de référence réduite à un type, une URL d\'origine et son archive — accompagnent la base afin que chaque donnée publiée reste traçable. Elles ne portent pas d\'analyse et ne suivent donc pas le cycle de relecture ci-dessus.</p>');
+  if(!PUBLIC_BUILD) h+=t('<p><b>⚠ Aperçu interne.</b> Ce fichier est un rendu de travail, destiné à la relecture éditoriale : il contient de la recherche non vérifiée et n\'est pas le site publié.</p>');
+  h+=t('<h3>Tags de source</h3>');
+  h+=t('<p>Chaque chiffre, citation ou donnée porte un tag indiquant sa nature :</p>');
   h+='<ul>';
-  h+='<li><span class="stag stag-O">O</span> officiel (Insee, JO, résultat de scrutin)</li>';
-  h+='<li><span class="stag stag-SP">SP</span> source primaire (vidéo intégrale, communiqué du parti)</li>';
-  h+='<li><span class="stag stag-M">M</span> média (à remonter vers la source primaire)</li>';
-  h+='<li><span class="stag stag-W">W</span> Wikipédia (source secondaire — citer l\'URL + date)</li>';
-  h+='<li><span class="stag stag-E">E</span> estimation / projection / interprétation</li>';
+  h+=t('<li><span class="stag stag-O">O</span> officiel (Insee, JO, résultat de scrutin)</li>');
+  h+=t('<li><span class="stag stag-SP">SP</span> source primaire (vidéo intégrale, communiqué du parti)</li>');
+  h+=t('<li><span class="stag stag-M">M</span> média (à remonter vers la source primaire)</li>');
+  h+=t('<li><span class="stag stag-W">W</span> Wikipédia (source secondaire — citer l\'URL + date)</li>');
+  h+=t('<li><span class="stag stag-E">E</span> estimation / projection / interprétation</li>');
   h+='</ul>';
-  h+='<p><b>Zéro chiffre sans source + date.</b> Toute donnée non sourcée reste en statut « draft ».</p>';
-  h+='<h3>Archivage des sources</h3>';
-  h+='<p>Les sources primaires sont archivées (Wayback Machine / archive.today) au moment de l\'usage — les contenus politiques disparaissent ou sont édités. Chaque note Source porte une URL d\'origine et une URL d\'archive.</p>';
-  h+='<h3>Neutralité — principe non négociable</h3>';
-  h+='<p>Cette base ne recommande <b>jamais</b> un vote, ne hiérarchise <b>jamais</b> les partis, n\'emploie <b>jamais</b> de vocabulaire de verdict (« bon », « mauvais », « vrai », « faux »). Les confrontations juxtaposent les éléments — <b>le lecteur juge</b>.</p>';
-  h+='<h3>Tribunes — la couche d\'opinion, séparée</h3>';
-  h+='<p>La rubrique <a onclick="go(\'list-Articles\')"><b>Tribunes</b></a> est la <b>seule</b> zone du site où une opinion est exprimée, et elle existe parce qu\'elle est <b>étiquetée</b> : chaque tribune est <b>signée</b>, écrite à la première personne, et porte un bandeau d\'identification en tête de page.</p>';
-  h+='<p>Ce que la tribune change : son auteur peut argumenter et prendre parti ; la règle « juxtaposer sans verdict » ne s\'y applique pas.</p>';
-  h+='<p>Ce qu\'elle ne change pas :</p>';
+  h+=t('<p><b>Zéro chiffre sans source + date.</b> Toute donnée non sourcée reste en statut « draft ».</p>');
+  h+=t('<h3>Archivage des sources</h3>');
+  h+=t('<p>Les sources primaires sont archivées (Wayback Machine / archive.today) au moment de l\'usage — les contenus politiques disparaissent ou sont édités. Chaque note Source porte une URL d\'origine et une URL d\'archive.</p>');
+  h+=t('<h3>Neutralité — principe non négociable</h3>');
+  h+=t('<p>Cette base ne recommande <b>jamais</b> un vote, ne hiérarchise <b>jamais</b> les partis, n\'emploie <b>jamais</b> de vocabulaire de verdict (« bon », « mauvais », « vrai », « faux »). Les confrontations juxtaposent les éléments — <b>le lecteur juge</b>.</p>');
+  h+=t('<h3>Tribunes — la couche d\'opinion, séparée</h3>');
+  h+=t('<p>La rubrique <a onclick="go(\'list-Articles\')"><b>Tribunes</b></a> est la <b>seule</b> zone du site où une opinion est exprimée, et elle existe parce qu\'elle est <b>étiquetée</b> : chaque tribune est <b>signée</b>, écrite à la première personne, et porte un bandeau d\'identification en tête de page.</p>');
+  h+=t('<p>Ce que la tribune change : son auteur peut argumenter et prendre parti ; la règle « juxtaposer sans verdict » ne s\'y applique pas.</p>');
+  h+=t('<p>Ce qu\'elle ne change pas :</p>');
   h+='<ul>';
-  h+='<li><b>Aucune consigne de vote</b> — ni dans les tribunes, ni ailleurs sur ce site.</li>';
-  h+='<li><b>Aucune attaque personnelle</b> — on y critique une position, un acte public, un chiffre, jamais une personne.</li>';
-  h+='<li><b>Le fait reste sourcé</b> : mêmes exigences de source, de date et de tag que dans la base. L\'opinion est libre ; le fait sur lequel elle s\'appuie ne l\'est pas.</li>';
-  h+='<li><b>Étanchéité</b> : une tribune n\'est jamais citée comme source par la base neutre. Le lien va de la tribune vers les faits, jamais l\'inverse.</li>';
+  h+=t('<li><b>Aucune consigne de vote</b> — ni dans les tribunes, ni ailleurs sur ce site.</li>');
+  h+=t('<li><b>Aucune attaque personnelle</b> — on y critique une position, un acte public, un chiffre, jamais une personne.</li>');
+  h+=t('<li><b>Le fait reste sourcé</b> : mêmes exigences de source, de date et de tag que dans la base. L\'opinion est libre ; le fait sur lequel elle s\'appuie ne l\'est pas.</li>');
+  h+=t('<li><b>Étanchéité</b> : une tribune n\'est jamais citée comme source par la base neutre. Le lien va de la tribune vers les faits, jamais l\'inverse.</li>');
   h+='</ul>';
-  h+='<p>Le taux de validation affiché ci-dessus porte sur la <b>base neutre uniquement</b> — les tribunes sont comptées à part.</p>';
-  h+='<h3>Dispositifs rhétoriques</h3>';
-  h+='<p>Les déclarations peuvent être taggées avec leur dispositif rhétorique principal — un outil pédagogique pour repérer comment un propos est construit, sans juger la personne :</p>';
+  h+=t('<p>Le taux de validation affiché ci-dessus porte sur la <b>base neutre uniquement</b> — les tribunes sont comptées à part.</p>');
+  h+=t('<h3>Dispositifs rhétoriques</h3>');
+  h+=t('<p>Les déclarations peuvent être taggées avec leur dispositif rhétorique principal — un outil pédagogique pour repérer comment un propos est construit, sans juger la personne :</p>');
   h+='<ul>';
-  h+='<li><b>euphémisme</b> — adoucir un terme pour en réduire la charge</li>';
-  h+='<li><b>métaphore</b> — analogie imagée pour cadrer un sujet</li>';
-  h+='<li><b>prolepse</b> — anticiper et désamorcer une objection</li>';
-  h+='<li><b>fausse équivalence</b> — présenter deux choses comme égales quand elles ne le sont pas</li>';
-  h+='<li><b>argument d\'autorité</b> — s\'appuyer sur un statut plutôt que sur un fait</li>';
-  h+='<li><b>recadrage</b> — changer le cadre du débat</li>';
+  h+=t('<li><b>euphémisme</b> — adoucir un terme pour en réduire la charge</li>');
+  h+=t('<li><b>métaphore</b> — analogie imagée pour cadrer un sujet</li>');
+  h+=t('<li><b>prolepse</b> — anticiper et désamorcer une objection</li>');
+  h+=t('<li><b>fausse équivalence</b> — présenter deux choses comme égales quand elles ne le sont pas</li>');
+  h+=t('<li><b>argument d\'autorité</b> — s\'appuyer sur un statut plutôt que sur un fait</li>');
+  h+=t('<li><b>recadrage</b> — changer le cadre du débat</li>');
   h+='<li><b>amalgame</b> — associer deux notions distinctes</li>';
-  h+='<li><b>déplacement de sujet</b> — répondre à une autre question que celle posée</li>';
+  h+=t('<li><b>déplacement de sujet</b> — répondre à une autre question que celle posée</li>');
   h+='</ul>';
   h+='<h3>X / Twitter</h3>';
-  h+='<p>X/Twitter est une <b>couche de veille uniquement</b> — jamais cité comme source sur le site. Toute information issue d\'un réseau social est remontée à sa <b>source primaire</b> (vidéo intégrale, communiqué officiel) avant publication.</p>';
-  h+='<h3>Contenu de la base</h3>';
+  h+=t('<p>X/Twitter est une <b>couche de veille uniquement</b> — jamais cité comme source sur le site. Toute information issue d\'un réseau social est remontée à sa <b>source primaire</b> (vidéo intégrale, communiqué officiel) avant publication.</p>');
+  h+=t('<h3>Contenu de la base</h3>');
   h+='<table><thead><tr><th>Type</th><th>Notes</th></tr></thead><tbody>';
   FOLDERS.forEach(f=>{h+='<tr><td>'+(FOLDER_LABEL_PL[f]||FOLDER_LABEL[f]||f)+'</td><td>'+counts[f]+'</td></tr>';});
   h+='</tbody></table>';
@@ -1192,7 +1273,8 @@ function onSearch(q){
   document.getElementById("app").innerHTML=h;
 }
 window.addEventListener("hashchange",render);
-syncThemeIcon();
+syncLangBtn();
+applyChrome();
 render();
 </script>
 </body>
